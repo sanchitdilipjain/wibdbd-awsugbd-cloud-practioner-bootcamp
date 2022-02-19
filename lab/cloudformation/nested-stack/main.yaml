@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Cloudforamtion Workshop - Lab for Nested Stacks
+
+Parameters:
+  S3BucketName:
+    Description: S3 bucket name for the Nested Stacks. 
+    Type: String
+    Default: my-aws-session-code
+
+  AvailabilityZones:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    Description: The list of Availability Zones to use for the subnets in the VPC.
+
+  VPCName:
+    Type: String
+    Description: The name of the VPC.
+    Default: cfn-vpc
+
+  VPCCidr:
+    Type: String
+    Description: The CIDR block for the VPC.
+    Default: 10.0.0.0/16
+
+  PublicSubnet1Cidr:
+    Type: String
+    Description: The CIDR block for the public subnet located in Availability Zone 1.
+    Default: 10.0.0.0/24
+
+  PublicSubnet2Cidr:
+    Type: String
+    Description: The CIDR block for the public subnet located in Availability Zone 2.
+    Default: 10.0.1.0/24
+
+  EnvironmentType:
+    Description: 'Specify the Environment type of the stack.'
+    Type: String
+    Default: Test
+    AllowedValues:
+      - Dev
+      - Test
+      - Prod
+    ConstraintDescription: 'Specify either Dev, Test or Prod.'
+
+Resources:
+  VpcStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/nested-stacks/vpc.yaml
+      TimeoutInMinutes: 20
+      Parameters:
+        AvailabilityZones:
+          Fn::Join:
+            - ','
+            - !Ref AvailabilityZones
+        VPCCidr: !Ref VPCCidr
+        VPCName: !Ref VPCName
+        PublicSubnet1Cidr: !Ref PublicSubnet1Cidr
+        PublicSubnet2Cidr: !Ref PublicSubnet2Cidr
+
+  IamStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/nested-stacks/iam.yaml
+      TimeoutInMinutes: 10
+
+  EC2Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketName}.s3.amazonaws.com/nested-stacks/ec2.yaml
+      TimeoutInMinutes: 20
+      Parameters:
+        EnvironmentType: !Ref EnvironmentType
+        VpcId: !GetAtt VpcStack.Outputs.VpcId
+        SubnetId: !GetAtt VpcStack.Outputs.PublicSubnet1
+        WebServerInstanceProfile: !GetAtt IamStack.Outputs.WebServerInstanceProfile
+
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt EC2Stack.Outputs.WebsiteURL
